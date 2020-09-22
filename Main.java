@@ -21,8 +21,8 @@ public class Main {
             students[j].start();
         }
 
-        Display d = new Display(ts, classrooms, N);
-        d.start();
+        //Display d = new Display(ts, classrooms, N);
+        //d.start();
     }
 }
 
@@ -43,10 +43,10 @@ class Display extends Thread {
         try {
             int N = numStudents;
             while (N != 0) {
+                sleep(500);
                 int n1 = t.out();
                 int n2 = c.out();
                 N = n1 + n2;
-                sleep(500);
             }
             this.interrupt();
         } catch (InterruptedException e) {
@@ -70,26 +70,14 @@ class Student extends Thread {
     @Override
     public void run() {
         try {
-            boolean finishedLesson = false;
-            while (!finishedLesson) {
-                int turnstileId = t.selectTurnstile(this);
-                sleep(1000);
-                t.releaseTurnstile(turnstileId);
-                int classId = (int) (Math.random() * numClassrooms);
-                classrooms.joinClassroom(this, classId);
-                while (classrooms.getPresentStudents(classId).contains(this))
-                    ; // wait for the end of the lesson
-                finishedLesson = true;
-            }
-            System.out.println("Studente " + getStudentName() + " ha finito");
-            this.interrupt();
+            int turnstileId = t.selectTurnstile(this);
+            sleep(1000);
+            t.releaseTurnstile(turnstileId);
+            int classId = (int) (Math.random() * numClassrooms);
+            classrooms.joinClassroom(this, classId);
         } catch (InterruptedException e) {
             System.out.println(e.getMessage());
         }
-    }
-
-    int getStudentName() {
-        return Integer.parseInt(getName());
     }
 }
 
@@ -179,56 +167,52 @@ class Classrooms {
         seatsPerClass = K;
         lesson = new boolean[M];
         waitingStudents = new ArrayList<>();
-        for (int i = 0; i < M; i++) {
+        for (int i = 0; i < M; i++)
             waitingStudents.add(new ArrayList<>());
-        }
         presentStudents = new ArrayList<>();
-        for (int i = 0; i < M; i++) {
+        for (int i = 0; i < M; i++)
             presentStudents.add(new ArrayList<>());
-        }
     }
 
     synchronized void joinClassroom(Student s, int classId) throws InterruptedException {
         while (presentStudents.get(classId).size() == seatsPerClass) {
-            if (!waitingStudents.get(classId).contains(s)) {
-                System.out.println("\nStudente " + s.getStudentName() + " aspetta per la classe: " + classId);
+            if (!waitingStudents.get(classId).contains(s))
                 waitingStudents.get(classId).add(s);
-            }
             wait();
         }
-        incPresentStudents(s, classId);
-        if (presentStudents.get(classId).size() == 1 && !lesson[classId]) {
-            lesson[classId] = true;
-            startNewLesson(classId);
-        }
-        if (presentStudents.get(classId).size() == 0 && waitingStudents.get(classId).size() > 0) {
+        if (presentStudents.get(classId).size() == 0 && waitingStudents.get(classId).size() > 0 && !lesson[classId]) {
             for (int i = 0; i < waitingStudents.get(classId).size(); i++) {
-                Student stud = waitingStudents.get(classId).get(i);
                 if (presentStudents.get(classId).size() < seatsPerClass) {
+                    Student stud = waitingStudents.get(classId).get(i);
                     incPresentStudents(stud, classId);
-                    waitingStudents.get(classId).remove(i);
+                    waitingStudents.get(classId).remove(waitingStudents.get(classId).get(i));
                 }
             }
             lesson[classId] = true;
             startNewLesson(classId);
+        } else {
+            incPresentStudents(s, classId);
+            if (presentStudents.get(classId).size() == 1 && !lesson[classId]) {
+                lesson[classId] = true;
+                startNewLesson(classId);
+            }
         }
     }
 
     private void startNewLesson(int classId) {
-        System.out.println("\nInizio lezione in aula " + classId);
         Lesson ls = new Lesson(classDuration, classId, this);
         ls.start();
     }
 
     private void incPresentStudents(Student s, int classId) {
-        System.out.println("\nStudente " + s.getStudentName() + " entra nella aula " + classId);
         presentStudents.get(classId).add(s);
     }
 
-    synchronized void restartLesson(int classId) throws InterruptedException {
+    synchronized void restartLesson(int classId) {
+        for (Student s : presentStudents.get(classId))
+            s.interrupt();
         lesson[classId] = false;
         presentStudents.get(classId).clear();
-        Thread.sleep(2000);
         notifyAll();
     }
 
@@ -250,30 +234,30 @@ class Classrooms {
         System.out.println();
         return sum;
     }
-
-    ArrayList<Student> getPresentStudents(int classId) {
-        return presentStudents.get(classId);
-    }
 }
 
 
 class Lesson extends Thread {
     private int classDuration;
     private int classId;
+    private boolean finishedLesson;
     private Classrooms classrooms;
 
     Lesson(int classDuration, int classId, Classrooms classrooms) {
         this.classDuration = classDuration;
         this.classId = classId;
         this.classrooms = classrooms;
+        this.finishedLesson = false;
     }
 
     @Override
     public void run() {
         try {
-            sleep(classDuration);
-            classrooms.restartLesson(classId);
-            System.out.println("\nFine lezione in aula " + classId);
+            while (!finishedLesson) {
+                sleep(classDuration);
+                classrooms.restartLesson(classId);
+                finishedLesson = true;
+            }
             this.interrupt();
         } catch (InterruptedException e) {
             System.out.println(e.getMessage());
