@@ -4,11 +4,11 @@ import java.util.ArrayList;
 public class Main {
 
     public static void main(String[] args) {
-        final int N = 10;   // number of students
-        final int M = 5;    // number of classrooms
-        final int K = 2;    // seats per classroom
-        final int T = 10000;    // class duration
-        final int NUM_TURNSTILES = 4;   // number of turnstiles
+        final int N = 10;               // number of students
+        final int M = 4;                // number of classrooms
+        final int K = 2;                // seats per classroom
+        final int T = 10000;            // class duration
+        final int NUM_TURNSTILES = 4;
 
         Classrooms classrooms = new Classrooms(T, M, K);
 
@@ -21,21 +21,21 @@ public class Main {
             students[j].start();
         }
 
-        //Display d = new Display(ts, classrooms, N);
-        //d.start();
+        Display d = new Display(ts, classrooms, N);
+        d.start();
     }
 }
 
 
 class Display extends Thread {
+    private int numStudents;
     private Turnstiles t;
     private Classrooms c;
-    private int numStudents;
 
     Display(Turnstiles t, Classrooms c, int numStudents) {
+        this.numStudents = numStudents;
         this.t = t;
         this.c = c;
-        this.numStudents = numStudents;
     }
 
     @Override
@@ -57,14 +57,14 @@ class Display extends Thread {
 
 
 class Student extends Thread {
+    private int numClassrooms;
     private Turnstiles t;
     private Classrooms classrooms;
-    private int numClassrooms;
 
     Student(Turnstiles t, Classrooms classrooms, int numClassrooms) {
+        this.numClassrooms = numClassrooms;
         this.t = t;
         this.classrooms = classrooms;
-        this.numClassrooms = numClassrooms;
     }
 
     @Override
@@ -83,8 +83,8 @@ class Student extends Thread {
 
 
 class Turnstiles {
-    private ArrayList<ArrayList<Student>> studWaitingPerTurnstile;
     private boolean[] passing;
+    private ArrayList<ArrayList<Student>> studWaitingPerTurnstile;
 
     Turnstiles(int numTurnstiles) {
         passing = new boolean[numTurnstiles];
@@ -156,22 +156,27 @@ class Turnstiles {
 
 
 class Classrooms {
+    private int seatsPerClass;
     private int classDuration;
     private boolean[] lesson;
     private ArrayList<ArrayList<Student>> presentStudents;
     private ArrayList<ArrayList<Student>> waitingStudents;
-    private int seatsPerClass;
 
     Classrooms(int time, int M, int K) {
-        classDuration = time;
         seatsPerClass = K;
+        classDuration = time;
         lesson = new boolean[M];
-        waitingStudents = new ArrayList<>();
-        for (int i = 0; i < M; i++)
-            waitingStudents.add(new ArrayList<>());
         presentStudents = new ArrayList<>();
         for (int i = 0; i < M; i++)
             presentStudents.add(new ArrayList<>());
+        waitingStudents = new ArrayList<>();
+        for (int i = 0; i < M; i++)
+            waitingStudents.add(new ArrayList<>());
+    }
+
+    private void startNewLesson(int classId) {
+        Lesson ls = new Lesson(classDuration, classId, this);
+        ls.start();
     }
 
     synchronized void joinClassroom(Student s, int classId) throws InterruptedException {
@@ -180,58 +185,39 @@ class Classrooms {
                 waitingStudents.get(classId).add(s);
             wait();
         }
-        if (presentStudents.get(classId).size() == 0 && waitingStudents.get(classId).size() > 0 && !lesson[classId]) {
-            for (int i = 0; i < waitingStudents.get(classId).size(); i++) {
-                if (presentStudents.get(classId).size() < seatsPerClass) {
-                    Student stud = waitingStudents.get(classId).get(i);
-                    incPresentStudents(stud, classId);
-                    waitingStudents.get(classId).remove(waitingStudents.get(classId).get(i));
-                }
-            }
+        if (waitingStudents.get(classId).contains(s))
+            waitingStudents.get(classId).remove(s);
+        presentStudents.get(classId).add(s);
+        if (presentStudents.get(classId).size() == 1 && !lesson[classId]) {
             lesson[classId] = true;
             startNewLesson(classId);
-        } else {
-            incPresentStudents(s, classId);
-            if (presentStudents.get(classId).size() == 1 && !lesson[classId]) {
-                lesson[classId] = true;
-                startNewLesson(classId);
-            }
         }
-    }
-
-    private void startNewLesson(int classId) {
-        Lesson ls = new Lesson(classDuration, classId, this);
-        ls.start();
-    }
-
-    private void incPresentStudents(Student s, int classId) {
-        presentStudents.get(classId).add(s);
     }
 
     synchronized void restartLesson(int classId) {
         for (Student s : presentStudents.get(classId))
             s.interrupt();
-        lesson[classId] = false;
         presentStudents.get(classId).clear();
+        lesson[classId] = false;
         notifyAll();
     }
 
     synchronized int out() {
         int sum = 0;
-        System.out.println("Students in each classroom:");
+        System.out.println("\nStudents in each classroom:");
         for (ArrayList<Student> s : presentStudents) {
             System.out.print(s.size() + " ");
             sum += s.size();
         }
-        System.out.println("Students waiting for each classroom:");
+        System.out.println("\nStudents waiting for each classroom:");
         for (ArrayList<Student> s : waitingStudents) {
             System.out.print(s.size() + " ");
             sum += s.size();
         }
-        System.out.println("Lesson in each classroom:");
+        System.out.println("\nLesson in each classroom:");
         for (boolean s : lesson)
             System.out.print(s + " ");
-        System.out.println();
+        System.out.println("\n");
         return sum;
     }
 }
@@ -246,8 +232,8 @@ class Lesson extends Thread {
     Lesson(int classDuration, int classId, Classrooms classrooms) {
         this.classDuration = classDuration;
         this.classId = classId;
-        this.classrooms = classrooms;
         this.finishedLesson = false;
+        this.classrooms = classrooms;
     }
 
     @Override
