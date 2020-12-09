@@ -4,9 +4,9 @@ import java.util.ArrayList;
 public class Main {
 
     public static void main(String[] args) {
-        final int N = 10;               // number of students
-        final int M = 4;                // number of classrooms
-        final int K = 2;                // seats per classroom
+        final int N = 35;              // number of students
+        final int M = 5;                // number of classrooms
+        final int K = 10;               // seats per classroom
         final int T = 10000;            // class duration
         final int NUM_TURNSTILES = 4;
 
@@ -29,13 +29,13 @@ public class Main {
 
 class Display extends Thread {
     private int numStudents;
-    private Turnstiles t;
-    private Classrooms c;
+    private Turnstiles turnstiles;
+    private Classrooms classrooms;
 
-    Display(Turnstiles t, Classrooms c, int numStudents) {
+    Display(Turnstiles turnstiles, Classrooms classrooms, int numStudents) {
         this.numStudents = numStudents;
-        this.t = t;
-        this.c = c;
+        this.turnstiles = turnstiles;
+        this.classrooms = classrooms;
     }
 
     @Override
@@ -44,11 +44,10 @@ class Display extends Thread {
             int N = numStudents;
             while (N != 0) {
                 sleep(500);
-                int n1 = t.out();
-                int n2 = c.out();
+                int n1 = turnstiles.out();
+                int n2 = classrooms.out();
                 N = n1 + n2;
             }
-            this.interrupt();
         } catch (InterruptedException e) {
             System.out.println(e.getMessage());
         }
@@ -58,21 +57,21 @@ class Display extends Thread {
 
 class Student extends Thread {
     private int numClassrooms;
-    private Turnstiles t;
+    private Turnstiles turnstiles;
     private Classrooms classrooms;
 
-    Student(Turnstiles t, Classrooms classrooms, int numClassrooms) {
+    Student(Turnstiles turnstiles, Classrooms classrooms, int numClassrooms) {
         this.numClassrooms = numClassrooms;
-        this.t = t;
+        this.turnstiles = turnstiles;
         this.classrooms = classrooms;
     }
 
     @Override
     public void run() {
         try {
-            int turnstileId = t.selectTurnstile(this);
+            int turnstileId = turnstiles.selectTurnstile(this);
             sleep(1000);
-            t.releaseTurnstile(turnstileId);
+            turnstiles.releaseTurnstile(turnstileId);
             int classId = (int) (Math.random() * numClassrooms);
             classrooms.joinClassroom(this, classId);
         } catch (InterruptedException e) {
@@ -93,33 +92,13 @@ class Turnstiles {
             studWaitingPerTurnstile.add(new ArrayList<>());
     }
 
-    private synchronized boolean allPassing() {
-        boolean allPAssing = true;
-        for (boolean b : passing) {
-            if (!b) {
-                allPAssing = false;
-                break;
-            }
-        }
-        return allPAssing;
-    }
-
     private synchronized int shortestWait() {
         int minWait = 100000;
         int index = 0;
         for (int i = 0; i < studWaitingPerTurnstile.size(); i++) {
-            if (!allPassing()) {
-                if (!passing[i]) {
-                    if (studWaitingPerTurnstile.get(i).size() < minWait) {
-                        minWait = studWaitingPerTurnstile.get(i).size();
-                        index = i;
-                    }
-                }
-            } else {
-                if (studWaitingPerTurnstile.get(i).size() < minWait) {
-                    minWait = studWaitingPerTurnstile.get(i).size();
-                    index = i;
-                }
+            if (studWaitingPerTurnstile.get(i).size() < minWait) {
+                minWait = studWaitingPerTurnstile.get(i).size();
+                index = i;
             }
         }
         return index;
@@ -226,25 +205,19 @@ class Classrooms {
 class Lesson extends Thread {
     private int classDuration;
     private int classId;
-    private boolean finishedLesson;
     private Classrooms classrooms;
 
     Lesson(int classDuration, int classId, Classrooms classrooms) {
         this.classDuration = classDuration;
         this.classId = classId;
-        this.finishedLesson = false;
         this.classrooms = classrooms;
     }
 
     @Override
     public void run() {
         try {
-            while (!finishedLesson) {
-                sleep(classDuration);
-                classrooms.restartLesson(classId);
-                finishedLesson = true;
-            }
-            this.interrupt();
+            sleep(classDuration);
+            classrooms.restartLesson(classId);
         } catch (InterruptedException e) {
             System.out.println(e.getMessage());
         }
